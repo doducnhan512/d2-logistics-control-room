@@ -1,0 +1,94 @@
+<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>D2 · Logistics Control Room</title><style>
+:root{--bg:#f4f6fb;--cd:#fff;--tx:#14213d;--mu:#5b6785;--bd:#dde2ef;--ok:#1a9e5c;--wa:#d99a00;--rd:#d62839;--bl:#2457c5;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#0b1020;--cd:#141b33;--tx:#e8ecf8;--mu:#9aa6c7;--bd:#263056;--ok:#2ecc87;--wa:#f5b82e;--rd:#ff5a6a;--bl:#7aa5ff}}
+:root[data-theme=dark]{--bg:#0b1020;--cd:#141b33;--tx:#e8ecf8;--mu:#9aa6c7;--bd:#263056;--ok:#2ecc87;--wa:#f5b82e;--rd:#ff5a6a;--bl:#7aa5ff}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.w{max-width:1080px;margin:auto;padding:12px}h1{font-size:19px;margin:4px 0}h3{margin:0 0 6px;font-size:15px}.m{color:var(--mu);font-size:12px}
+.tb{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}button{font:inherit;border:1px solid var(--bd);background:var(--cd);color:var(--tx);border-radius:8px;padding:6px 12px;cursor:pointer}button.on{background:var(--bl);color:#fff;border-color:var(--bl)}
+.g{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:8px;margin:8px 0}.c{background:var(--cd);border:1px solid var(--bd);border-radius:10px;padding:10px;margin:8px 0}.g .c{margin:0}
+.big{font-size:26px;font-weight:700}.bar{height:7px;background:var(--bd);border-radius:4px;overflow:hidden}.bar i{display:block;height:100%}
+.ok{color:var(--ok)}.wa{color:var(--wa)}.rd{color:var(--rd)}.al{padding:5px 8px;border-left:4px solid;margin:4px 0;background:var(--bg);border-radius:4px}
+.sl{display:grid;grid-template-columns:110px 1fr 42px;gap:8px;align-items:center}.sl input{width:100%}.sec{display:none}.sec.on{display:block}.ov{overflow-x:auto}
+li{margin:3px 0}table{border-collapse:collapse;width:100%}td,th{border-bottom:1px solid var(--bd);padding:4px 6px;text-align:left}code{background:var(--bg);padding:1px 5px;border-radius:4px}
+</style></head><body><div class="w">
+<h1>🏭 D2 · Logistics Control Room — Predict · Detect · Simulate · Optimize</h1>
+<div class="m">DENSO Factory Hacks 2026 · Dữ liệu <b>mô phỏng (synthetic)</b>, mức <b>zone-level</b>. Thay bằng log AGV/kho/dock thật khi được cấp.</div>
+<div class="tb" id="tb"></div>
+
+<div class="sec on" id="s0"><div class="c"><b>Giờ vận hành: <span id="clk"></span></b> &nbsp; <span class="m">Bơm sự cố để xem hệ thống phát hiện và đề xuất đối sách:</span>
+<div class="tb"><button id="e_fork">🔧 Xe nâng hỏng (−2)</button><button id="e_surge">📈 Đơn tăng +30%</button><button id="e_dock">🚪 Đóng 1 cửa dock</button></div></div>
+<div class="g" id="zn"></div><div class="c"><h3>🔔 Cảnh báo & đối sách</h3><div id="al"></div></div></div>
+
+<div class="sec" id="s1"><div class="c"><h3>Dự báo 24h tới (pallet/h), khoảng tin cậy 80%</h3><div class="ov" id="c1"></div><div class="m">Xanh: dự báo · vùng mờ: khoảng tin cậy · xám: thực tế hôm qua</div></div>
+<div class="c"><h3>Kiểm định hold-out (cùng bộ test)</h3><div class="ov" id="c2"></div><div class="m">Đen: thực tế · xanh: mô hình · cam nét đứt: baseline thủ công "hôm qua = hôm nay"</div><div class="g" id="mk"></div></div></div>
+
+<div class="sec" id="s2"><div class="c"><h3>What-if & tối ưu nguồn lực</h3><div id="sl"></div>
+<div class="tb"><button id="op">⚙️ Tối ưu (ILP, chịu rủi ro P90)</button><button id="rs">↺ Baseline</button></div><div class="m" id="msg"></div></div>
+<div class="c"><div class="ov" id="c3"></div><div class="m" id="lg"></div></div><div class="g" id="kp"></div></div>
+
+<div class="sec" id="s3"></div></div>
+<script>
+const $=s=>document.querySelector(s),pc=v=>Math.round(v*100)+'%',hh=h=>String(h%24).padStart(2,'0')+':00',mean=a=>a.reduce((x,y)=>x+y,0)/a.length;
+let sd=7;const rnd=()=>(sd=sd*16807%2147483647)/2147483647,gs=()=>Math.sqrt(-2*Math.log(rnd()+1e-9))*Math.cos(6.283*rnd());
+// dữ liệu tổng hợp 14 ngày x 24h (pallet/h): thay bằng log thật
+const sh=h=>30+70*Math.exp(-((h-8)**2)/6)+60*Math.exp(-((h-14)**2)/8);
+const D=[];for(let d=0;d<14;d++){const m=.92+.16*rnd();D.push(Array.from({length:24},(_,h)=>sh(h)*(1+.004*d)*m*(1+.06*gs())))}
+// 1) PREDICT: seasonal profile 7 ngày x hệ số level + khoảng tin cậy
+function fcst(days){const l7=days.slice(-7),se=Array.from({length:24},(_,h)=>mean(l7.map(d=>d[h]))),r=mean(days.slice(-3).flat())/mean(l7.flat()),f=se.map(v=>v*r),sg=se.map((v,h)=>Math.sqrt(mean(l7.map(d=>(d[h]-v)**2))));return{f,lo:f.map((v,h)=>v-1.28*sg[h]),hi:f.map((v,h)=>v+1.28*sg[h])}}
+const FT=fcst(D),FH=fcst(D.slice(6,13)),act=D[13],nv=D[12],mape=(p,a)=>mean(p.map((v,h)=>Math.abs(v-a[h])/a[h])),M1=mape(FH.f,act),M0=mape(nv,act);
+// 2) SIMULATE: zone = hàng đợi, năng lực mu_z(x) theo nguồn lực
+const Z=[{n:'Nhập hàng',s:1,k:'dock',q:28,c:r=>r.dock*28},{n:'Nhập kho',s:1,k:'fork',q:11,c:r=>r.fork*11+r.amr*5},{n:'Soạn hàng GTP',s:.8,k:'gtp',q:30,c:r=>r.gtp*30},{n:'Cấp line',s:.9,k:'amr',q:16,c:r=>r.amr*16+r.fork*2},{n:'Xuất hàng',s:.7,k:'dock',q:22,c:r=>r.dock*22}];
+const R0={dock:4,fork:6,amr:5,gtp:3},CO={dock:4,fork:1,amr:2.5,gtp:3},U={dock:'cửa dock',fork:'xe nâng',amr:'AMR',gtp:'trạm GTP'},COL=['#2457c5','#d99a00','#1a9e5c','#d62839','#8a4fd1'];
+const cost=R=>Object.keys(CO).reduce((a,k)=>a+CO[k]*R[k],0);
+const sim=(dem,R)=>Z.map(z=>{const c=z.c(R);let b=0;const L=[],B=[];dem.forEach(d=>{const t=d*z.s+b;L.push(t/c);b=Math.max(0,t-c);B.push(b)});return{L,B,c}});
+const kpi=S=>({o:S.reduce((a,z)=>a+z.L.filter(l=>l>1).length,0),pb:Math.max(...S.flatMap(z=>z.B)),dl:Math.max(...S.map(z=>Math.max(...z.B)/z.c*60))});
+function mc(dem,R){sd=99;const p=[];for(let i=0;i<200;i++){const g=Math.exp(.08*gs());p.push(kpi(sim(dem.map(v=>v*g*Math.exp(.1*gs())),R)).pb)}p.sort((a,b)=>a-b);return{p:p.filter(v=>v>20).length/200,p95:p[190]}}
+// 3) OPTIMIZE: ILP  min sum(c_k x_k)  s.t. mu_z(x) >= max_t(lambda_P90) * s_z / 0.9, duyệt toàn bộ 6864 tổ hợp => nghiệm tối ưu chính xác
+function opt(dem){const pk=Z.map(z=>Math.max(...dem)*z.s/.9);let best=null;
+for(let a=1;a<=8;a++)for(let b=2;b<=12;b++)for(let c=0;c<=12;c++)for(let d=1;d<=6;d++){const R={dock:a,fork:b,amr:c,gtp:d};if(Z.every((z,i)=>z.c(R)>=pk[i])){const k=cost(R);if(!best||k<best.k)best={R,k}}}return best}
+function ch(S,o){const W=640,H=210,p=34,x=i=>p+i*(W-p-8)/23,y=v=>H-24-v/o.max*(H-36);let s=`<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;min-width:420px">`;
+for(let k=0;k<=4;k++){const v=o.max*k/4;s+=`<line x1="${p}" x2="${W-8}" y1="${y(v)}" y2="${y(v)}" stroke="var(--bd)"/><text x="2" y="${y(v)+4}" font-size="10" fill="var(--mu)">${o.pct?pc(v):Math.round(v)}</text>`}
+for(let i=0;i<24;i+=3)s+=`<text x="${x(i)-8}" y="${H-6}" font-size="10" fill="var(--mu)">${i}h</text>`;
+if(o.band)s+=`<path d="M${o.band[0].map((v,i)=>x(i)+','+y(v)).join('L')}L${o.band[1].map((v,i)=>[i,v]).reverse().map(([i,v])=>x(i)+','+y(v)).join('L')}Z" fill="#2457c5" opacity=".15"/>`;
+if(o.ref!=null)s+=`<line x1="${p}" x2="${W-8}" y1="${y(o.ref)}" y2="${y(o.ref)}" stroke="#d62839" stroke-dasharray="5 4"/>`;
+S.forEach(a=>s+=`<polyline fill="none" stroke="${a.c}" stroke-width="${a.w||2}" ${a.d?'stroke-dasharray="5 4"':''} points="${a.v.map((v,i)=>x(i)+','+y(v)).join(' ')}"/>`);return s+'</svg>'}
+// tabs
+const T=['🎛 Control Room','📈 Dự báo','🧪 What-if & Tối ưu','💡 Ý tưởng & Mô hình'];T.forEach((t,i)=>{const b=document.createElement('button');b.textContent=t;b.onclick=()=>T.forEach((_,j)=>{$('#s'+j).classList.toggle('on',i==j);$('#tb').children[j].classList.toggle('on',i==j)});if(!i)b.className='on';$('#tb').appendChild(b)});
+// dự báo
+$('#c1').innerHTML=ch([{v:act,c:'#8a94ad',w:1.5},{v:FT.f,c:'#2457c5',w:2.5}],{max:140,band:[FT.lo,FT.hi]});
+$('#c2').innerHTML=ch([{v:act,c:'#14213d',w:2.5},{v:FH.f,c:'#2457c5'},{v:nv,c:'#e07b00',d:1}],{max:140});
+$('#mk').innerHTML=[['MAPE mô hình',pc(M1),'ok'],['MAPE baseline thủ công',pc(M0),'wa'],['Sai số giảm',Math.round((1-M1/M0)*100)+'%','ok']].map(a=>`<div class="c"><div class="m">${a[0]}</div><div class="big ${a[2]}">${a[1]}</div></div>`).join('');
+// what-if
+const W={...R0,surge:0},SL=[['dock','Cửa dock',1,8],['fork','Xe nâng',2,12],['amr','AMR',0,12],['gtp','Trạm GTP',1,6],['surge','Đơn tăng %',-20,60]],B0=kpi(sim(FT.f,R0));
+$('#sl').innerHTML=SL.map(s=>`<div class="sl"><span>${s[1]}</span><input type="range" id="r_${s[0]}" min="${s[2]}" max="${s[3]}" value="${W[s[0]]}"><b id="v_${s[0]}"></b></div>`).join('');
+SL.forEach(s=>$('#r_'+s[0]).oninput=e=>{W[s[0]]=+e.target.value;wi()});
+function wi(){SL.forEach(s=>{$('#r_'+s[0]).value=W[s[0]];$('#v_'+s[0]).textContent=W[s[0]]+(s[0]=='surge'?'%':'')});
+const dem=FT.f.map(v=>v*(1+W.surge/100)),S=sim(dem,W),K=kpi(S),Mc=mc(dem,W),dc=cost(W)-cost(R0);
+$('#c3').innerHTML=ch(S.map((z,i)=>({v:z.L,c:COL[i]})),{max:Math.max(1.4,...S.flatMap(z=>z.L))*1.02,pct:1,ref:1});
+$('#lg').innerHTML=Z.map((z,i)=>`<b style="color:${COL[i]}">━ ${z.n}</b>`).join(' &nbsp; ')+' &nbsp; <b class="rd">┅ 100% = quá tải</b>';
+$('#kp').innerHTML=[['Zone-giờ quá tải',K.o,B0.o,K.o>B0.o?'rd':'ok'],['Backlog đỉnh (pallet)',Math.round(K.pb),Math.round(B0.pb),K.pb>B0.pb?'rd':'ok'],['Trễ tệ nhất (phút)',Math.round(K.dl),Math.round(B0.dl),K.dl>B0.dl?'rd':'ok'],['P(backlog đỉnh >20)',pc(Mc.p),'Monte Carlo, P95: '+Math.round(Mc.p95),Mc.p>.3?'rd':'ok'],['Chi phí (điểm)',(dc>=0?'+':'')+dc.toFixed(1),'so với baseline',dc>0?'wa':'ok']].map(a=>`<div class="c"><div class="m">${a[0]}</div><div class="big ${a[3]}">${a[1]}</div><div class="m">${typeof a[2]=='number'?'baseline: '+a[2]:a[2]}</div></div>`).join('')}
+$('#op').onclick=()=>{const o=opt(FT.hi.map(v=>v*(1+W.surge/100)));if(o)Object.assign(W,o.R);$('#msg').textContent=o?`Nghiệm tối ưu: ${Object.keys(U).map(k=>o.R[k]+' '+U[k]).join(', ')} · chi phí ${o.k}`:'Không khả thi trong giới hạn nguồn lực.';wi()};
+$('#rs').onclick=()=>{Object.assign(W,R0,{surge:0});$('#msg').textContent='';wi()};wi();
+// control room: DETECT (thực tế vs kỳ vọng) + nhìn trước 4h
+let st=0,Bk=Z.map(()=>0);const E={fork:0,surge:0,dock:0};
+['fork','surge','dock'].forEach(k=>$('#e_'+k).onclick=e=>{E[k]^=1;e.target.classList.toggle('on',!!E[k])});
+function tick(){const h=(Math.floor(st/4)+6)%24,R={...R0,fork:R0.fork-2*E.fork,dock:R0.dock-E.dock},m=1+.3*E.surge,dem=FT.f[h]*m*(1+.04*gs()),al=[];let worst=null,wu=0;
+$('#clk').textContent=hh(h).slice(0,3)+String(st%4*15).padStart(2,'0');
+$('#zn').innerHTML=Z.map((z,i)=>{const c=z.c(R),f=dem*z.s,u=f/c,eu=FT.f[h]*z.s/z.c(R0);Bk[i]=Math.max(0,Bk[i]+(f-c)/4);
+let b=Bk[i],lk=0;for(let k=1;k<=4;k++){const ff=FT.f[(h+k)%24]*m*z.s;b=Math.max(0,b+ff-c);if(!lk&&ff+b>c)lk=k}
+const cl=u>1||Bk[i]>8?'rd':u>.85?'wa':'ok';
+if(u>1)al.push(['rd',`<b>${z.n}</b> đang quá tải ${pc(u)} (tồn ${Math.round(Bk[i])} pallet)`]);else if(lk)al.push(['wa',`<b>${z.n}</b>: dự báo quá tải sau ~${lk}h (${hh(h+lk)})`]);
+if(Math.abs(u-eu)>.15)al.push(['bl',`<b>${z.n}</b>: bất thường, tải thực ${pc(u)} vs kỳ vọng ${pc(eu)}`]);
+const sc=Math.max(u,lk?1:0);if(sc>wu){wu=sc;worst={z,c,pk:Math.max(...[0,1,2,3,4].map(k=>FT.f[(h+k)%24]))*m*z.s}}
+return`<div class="c"><div class="m">${i+1}. ${z.n}</div><div class="big ${cl}">${pc(u)}</div><div class="bar"><i style="width:${Math.min(100,u*100)}%;background:var(--${cl})"></i></div><div class="m">${Math.round(f)}/${c} pallet/h · tồn ${Math.round(Bk[i])}</div></div>`}).join('');
+if(worst&&wu>.9){const d=Math.ceil((worst.pk/.9-worst.c)/worst.z.q);if(d>0)al.push(['ok',`💡 <b>Đối sách:</b> thêm ${d} ${U[worst.z.k]} cho "${worst.z.n}", hoặc dời 15% lượng nhập khỏi giờ đỉnh (${Math.round(worst.pk)}→${Math.round(worst.pk*.85)} pallet/h)`])}
+$('#al').innerHTML=al.length?al.map(a=>`<div class="al" style="border-color:var(--${a[0]})">${a[1]}</div>`).join(''):'<span class="ok">✔ Vận hành ổn định, không có cảnh báo.</span>';st=(st+1)%96}
+tick();setInterval(tick,900);
+// ý tưởng & mô hình
+const O=opt(FT.hi),K1=kpi(sim(FT.f,O.R)),rw=(n,a,b)=>`<tr><td>${n}</td><td>${a}</td><td><b>${b}</b></td></tr>`;
+$('#s3').innerHTML=`<div class="c"><h3>🎯 Ý tưởng</h3>Người vận hành đang tính nguồn lực bằng Excel và chỉ thấy nút thắt khi đã xảy ra. Hệ thống gom dữ liệu về một nền tảng theo zone, <b>dự báo</b> tải, <b>phát hiện</b> bất thường, <b>mô phỏng</b> what-if và <b>tối ưu</b> nguồn lực, rồi báo trước 2–4 giờ kèm đối sách có số liệu.</div>
+<div class="c"><h3>🪜 Các bước làm</h3><ol><li><b>Hợp nhất dữ liệu</b> AGV/AMR, kho, dock, GTP, nhân lực thành chuỗi thời gian theo zone.</li><li><b>Predict:</b> dự báo pallet/h cho 24h tới kèm khoảng tin cậy; đo MAPE so với baseline thủ công.</li><li><b>Detect:</b> so tải thực với kỳ vọng, nhìn trước 4h để báo nút thắt sớm.</li><li><b>Simulate:</b> hàng đợi theo zone + Monte Carlo để thử kịch bản (sự cố, đơn tăng).</li><li><b>Optimize:</b> chọn cấu hình nguồn lực rẻ nhất mà vẫn đủ năng lực; hiển thị trên Control Room.</li></ol></div>
+<div class="c"><h3>🧮 Ba mô hình</h3><ol><li><b>Dự báo:</b> <code>ŷ(h)=s(h)·r</code>, s(h)=TB 7 ngày cùng giờ, r=TB 3 ngày/TB 7 ngày; khoảng tin cậy ±1.28σ(h). Bản thật: Prophet/XGBoost.</li><li><b>Hàng đợi theo zone:</b> <code>b(t)=max(0, b(t−1)+λ(t)·s_z−μ_z(x))</code>, tải=<code>(λ·s_z+b(t−1))/μ_z</code>.</li><li><b>Tối ưu nguyên (ILP):</b> <code>min Σ c_k·x_k</code> với <code>μ_z(x) ≥ max λ_P90·s_z / 0.9</code> mọi zone, x nguyên trong giới hạn. Dùng cận P90 nên chịu được biến động; duyệt toàn bộ 6.864 tổ hợp nên nghiệm là tối ưu chính xác (bản lớn: OR-Tools CP-SAT).</li></ol></div>
+<div class="c"><h3>📊 Kết quả trên dữ liệu mô phỏng</h3><table><tr><th>Chỉ số</th><th>Baseline</th><th>Hệ thống</th></tr>${rw('Sai số dự báo (MAPE)',pc(M0),pc(M1))}${rw('Zone-giờ quá tải',B0.o,K1.o)}${rw('Backlog đỉnh (pallet)',Math.round(B0.pb),Math.round(K1.pb))}${rw('Nguồn lực (dock/xe nâng/AMR/GTP)',Object.values(R0).join('/'),Object.values(O.R).join('/'))}${rw('Chi phí (điểm giả định)',cost(R0),O.k)}</table>
+<div class="m">Self-check: người vận hành hết phải tính tay và biết trước nút thắt. Số liệu là tổng hợp để minh họa; cần đo lại bằng dữ liệu và thông số thật của DMVN.</div></div>`;
+</script></body></html>
