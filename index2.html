@@ -1,0 +1,306 @@
+<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>D2 · Logistics Co-pilot tự hiệu chỉnh</title><style>
+:root{--bg:#f4f6fb;--cd:#fff;--tx:#14213d;--mu:#5b6785;--bd:#dde2ef;--ok:#1a9e5c;--wa:#d99a00;--rd:#d62839;--bl:#2457c5;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#0b1020;--cd:#141b33;--tx:#e8ecf8;--mu:#9aa6c7;--bd:#263056;--ok:#2ecc87;--wa:#f5b82e;--rd:#ff5a6a;--bl:#7aa5ff}}
+:root[data-theme=dark]{--bg:#0b1020;--cd:#141b33;--tx:#e8ecf8;--mu:#9aa6c7;--bd:#263056;--ok:#2ecc87;--wa:#f5b82e;--rd:#ff5a6a;--bl:#7aa5ff}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.w{max-width:1080px;margin:auto;padding:12px}h1{font-size:19px;margin:4px 0}h3{margin:0 0 6px;font-size:15px}.m{color:var(--mu);font-size:12px}
+.tb{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0;align-items:center}button,select{font:inherit;border:1px solid var(--bd);background:var(--cd);color:var(--tx);border-radius:8px;padding:6px 10px;cursor:pointer}button.on{background:var(--bl);color:#fff;border-color:var(--bl)}
+.g{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;margin:8px 0}.c{background:var(--cd);border:1px solid var(--bd);border-radius:10px;padding:10px;margin:8px 0}.g .c{margin:0}
+.big{font-size:24px;font-weight:700}.ok{color:var(--ok)}.wa{color:var(--wa)}.rd{color:var(--rd)}
+.al{padding:5px 8px;border-left:4px solid;margin:4px 0;background:var(--bg);border-radius:4px}.sec{display:none}.sec.on{display:block}.ov{overflow-x:auto}
+.bar{height:8px;background:var(--bd);border-radius:4px;overflow:hidden;margin:4px 0}.bar i{display:block;height:100%;background:var(--bl)}
+table{border-collapse:collapse;width:100%;margin:6px 0}td,th{border-bottom:1px solid var(--bd);padding:5px 6px;text-align:left;vertical-align:top}.r{text-align:right}
+li{margin:3px 0}code{background:var(--bg);padding:1px 5px;border-radius:4px}
+</style></head><body><div class="w">
+<h1>🏭 D2 · Logistics Co-pilot tự hiệu chỉnh</h1>
+<div class="m">DENSO Factory Hacks 2026 · Đề D2 · Toàn bộ dữ liệu là <b>mô phỏng</b> (nhà máy giả lập và lịch sử tổng hợp). Mọi con số là kết quả trên mô phỏng, chưa phải số liệu DMVN.</div>
+<div class="tb" id="tabs"></div>
+
+<div class="sec on" id="t0">
+ <div class="c"><b>Đồng hồ: <span id="clock">06:00</span></b> <span class="m">· 96 bước × 15 phút · kịch bản chuẩn có 3 sự cố đã đặt sẵn (xem tab Giải thích)</span>
+  <div class="tb"><button id="playbtn" onclick="togglePlay()">▶ Chạy</button><button onclick="newRun()">↺ Ngày mới</button><button onclick="inject('surge')">📈 Đơn tăng 30% (2h)</button><button onclick="inject('fork')">🔧 Xe nâng hỏng (2h)</button><button onclick="inject('dock')">🚪 Mất nửa cửa dock (2h)</button></div>
+  <div class="bar"><i id="prog" style="width:0%"></i></div></div>
+ <div class="g" id="zones"></div>
+ <div class="c"><h3>🔔 Cảnh báo & đối sách</h3><div id="alerts"></div></div>
+ <div class="c"><h3>🎛 Điều khiển cuộn có ràng buộc rủi ro (Trụ 3)</h3><div id="mpc" class="m"></div></div>
+ <div class="c"><h3>Backlog tổng của cả nhà máy</h3><div class="ov" id="live"></div><div class="m" id="legend"></div></div>
+</div>
+
+<div class="sec" id="t1">
+ <div class="c"><h3>Dự báo nhu cầu theo giờ và khoảng conformal thích nghi (Trụ 2)</h3><div class="ov" id="fc1"></div><div class="m">Xanh: dự báo · vùng mờ: khoảng ACI · đen: thực tế · cam nét đứt: "cùng giờ hôm qua"</div></div>
+ <div class="c"><h3>Độ phủ thực tế theo thời gian (mục tiêu 80%)</h3><div class="ov" id="fc2"></div><div class="m">Xanh: ACI tự điều chỉnh α · đỏ nét đứt: khoảng cố định ±1.28σ · xanh lá: mục tiêu 80%</div></div>
+ <div class="g" id="fcStats"></div>
+</div>
+
+<div class="sec" id="t2">
+ <div class="tb"><span class="m">Zone:</span><select id="zsel" onchange="renderTwin()"><option value="0">Nhập hàng</option><option value="1" selected>Nhập kho</option><option value="2">Soạn hàng GTP</option><option value="3">Cấp line</option><option value="4">Xuất hàng</option></select></div>
+ <div class="c"><h3>Backlog thật (đen) và ước lượng của twin (xanh, khoảng 90%)</h3><div class="ov" id="tw1"></div><div class="m">Twin không nhìn thấy backlog thật, chỉ thấy số nhập vào zone và sản lượng ra (có nhiễu).</div></div>
+ <div class="c"><h3>Hiệu suất thật (đen) và η̂ do bộ lọc hạt ước lượng (xanh)</h3><div class="ov" id="tw2"></div><div class="m">η giảm đột ngột khi có sự cố thiết bị; twin phát hiện qua sản lượng, không cần cảm biến thêm.</div></div>
+ <div class="g" id="twStats"></div>
+</div>
+
+<div class="sec" id="t3">
+ <div class="tb"><button onclick="runOpt()">▶ Chạy cả ngày (kịch bản chuẩn): không co-pilot vs co-pilot</button></div>
+ <div class="c" id="optOut"><span class="m">Bấm nút để chạy hai phương án trên cùng dữ liệu và cùng sự cố.</span></div>
+</div>
+
+<div class="sec" id="t4">
+ <div class="tb"><button onclick="runBandit()">▶ Mô phỏng 300 sự cố (phản hồi giả lập)</button></div>
+ <div class="c" id="banOut"></div>
+</div>
+
+<div class="sec" id="t5">
+ <div class="tb"><button onclick="runShap()">▶ Phân tích nguyên nhân (8 lần mô phỏng)</button></div>
+ <div class="c" id="shOut"><span class="m">Bấm nút để phân bổ phần tăng backlog đỉnh cho từng nguyên nhân.</span></div>
+</div>
+
+<div class="sec" id="t6"><div class="c">
+<h3>Ý tưởng cốt lõi</h3>
+Dashboard chỉ cho biết tình hình. Co-pilot là một vòng điều khiển khép kín: digital twin tự hiệu chỉnh theo thực tế, dự báo có khoảng tin cậy được kiểm chứng, điều khiển cuộn mỗi 15 phút với ràng buộc rủi ro, học hiệu quả đối sách từ người vận hành, và giải thích vì sao nghẽn.
+<h3 style="margin-top:12px">Năm trụ và nơi kiểm chứng</h3>
+<table><tr><th>Trụ</th><th>Phương pháp</th><th>Kiểm chứng trong demo</th></tr>
+<tr><td>1. Digital twin tự đồng bộ</td><td>Bộ lọc hạt 400 hạt, trạng thái ẩn: backlog và hiệu suất η từng zone; quan sát: sản lượng</td><td>Tab Digital twin: sai số so với thực tế và so với mô phỏng không hiệu chỉnh</td></tr>
+<tr><td>2. Dự báo có bảo đảm</td><td>Conformal thích nghi (ACI): α<sub>t+1</sub> = α<sub>t</sub> + γ(α − err<sub>t</sub>)</td><td>Tab Dự báo: độ phủ đo được so với mục tiêu 80%, và so với khoảng cố định</td></tr>
+<tr><td>3. Điều khiển cuộn</td><td>Mỗi 15 phút chọn cấu hình rẻ nhất thỏa CVaR₉₀ backlog ≤ 20 pallet trên 30 kịch bản, chỉ áp dụng bước đầu</td><td>Tab Điều khiển cuộn: so sánh với cấu hình cố định</td></tr>
+<tr><td>4. Học đối sách</td><td>Thompson sampling (Beta–Bernoulli) theo bối cảnh zone × ca; prior là luật giả định</td><td>Tab Học đối sách: tỷ lệ thành công 50 sự cố đầu và cuối (phản hồi giả lập)</td></tr>
+<tr><td>5. Giải thích nguyên nhân</td><td>Giá trị Shapley trên 3 nguyên nhân, 8 lần mô phỏng</td><td>Tab Giải thích: tổng các phần đóng góp bằng đúng phần tăng backlog đỉnh</td></tr></table>
+<h3 style="margin-top:12px">Giới hạn cần nói rõ</h3>
+<ul>
+<li>Toàn bộ dữ liệu là mô phỏng. Các hệ số năng lực, tỷ lệ dòng hàng và chi phí là giả định cần thay bằng số của DMVN.</li>
+<li>Bảo đảm conformal là về tỷ lệ vi phạm trung bình dài hạn, không áp dụng cho từng thời điểm.</li>
+<li>CVaR tính trên tập kịch bản rời rạc; nghiệm chọn trong lưới cấu hình, chưa phải MILP tổng quát.</li>
+<li>Hiệu suất η chỉ ước lượng được khi có hàng đợi; lúc không có hàng đợi thì twin dựa vào giá trị trước đó.</li>
+<li>Học đối sách dùng phản hồi giả lập; chỉ chứng minh cơ chế học, chưa chứng minh hiệu quả thật của từng đối sách.</li>
+</ul></div></div>
+</div>
+
+<script>
+// ===ENGINE===
+const T_DAY=96,NH=360,H0=336,B_MAX=20,SY=2.5,KAPPA=0.5,S_SC=30,EPS=0.1;
+const ZN=['Nhập hàng','Nhập kho','Soạn hàng GTP','Cấp line','Xuất hàng'];
+const ZS=[1.0,1.0,0.8,0.9,0.7];
+const CAPF=[R=>R.dock*28,R=>R.fork*11+R.amr*5,R=>R.gtp*30,R=>R.amr*16+R.fork*2,R=>R.dock*22];
+const KEYS=['dock','fork','amr','gtp'],UN={dock:'cửa dock',fork:'xe nâng',amr:'AMR',gtp:'trạm GTP'};
+const CO={dock:4,fork:1,amr:2.5,gtp:3},R0={dock:4,fork:6,amr:5,gtp:3},RMAX={dock:8,fork:12,amr:12,gtp:6};
+const costOf=R=>KEYS.reduce((a,k)=>a+CO[k]*R[k],0);
+const CONF=[];
+for(let d=1;d<=8;d++)for(let f=2;f<=12;f++)for(let a=0;a<=12;a++)for(let g=1;g<=6;g++){const R={dock:d,fork:f,amr:a,gtp:g};R.cost=costOf(R);CONF.push(R)}
+const rng=s=>{let a=s>>>0;return()=>{a=(a+0x6D2B79F5)|0;let t=Math.imul(a^(a>>>15),1|a);t=(t+Math.imul(t^(t>>>7),61|t))^t;return((t^(t>>>14))>>>0)/4294967296}};
+const gauss=r=>Math.sqrt(-2*Math.log(r()+1e-12))*Math.cos(2*Math.PI*r());
+const clamp=(x,a,b)=>Math.min(b,Math.max(a,x));
+const mean=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:NaN;
+const sh=h=>30+70*Math.exp(-((h-8)**2)/6)+60*Math.exp(-((h-14)**2)/8);
+const hodOf=t=>(t+6)%24;
+function mkNoise(seed){const r=rng(seed),dem=new Float64Array(NH),eta=new Float64Array(T_DAY*5),obs=new Float64Array(T_DAY*5);for(let i=0;i<NH;i++)dem[i]=gauss(r);for(let i=0;i<eta.length;i++)eta[i]=gauss(r);for(let i=0;i<obs.length;i++)obs[i]=gauss(r);return{dem,eta,obs}}
+let NZ=mkNoise(42);
+const demTrue=(t,sg,N)=>sh(hodOf(t))*(1+0.03*Math.sin(2.1*Math.floor((t+6)/24)))*(1+0.05*N.dem[t])*sg;
+const histA=N=>{const A=[];for(let t=0;t<H0;t++)A.push(demTrue(t,t>=240?1.35:1,N));return A};
+
+// ---- Trụ 2: dự báo + conformal thích nghi (ACI)
+const seas=(A,i)=>{let s=0;for(let d=1;d<=7;d++)s+=A[i-24*d];return s/7};
+const lvl=(A,t)=>{let n=0,d=0;for(let i=t-12;i<t;i++){n+=A[i];d+=seas(A,i)}return clamp(n/d,0.7,1.6)};
+const sigG=(res,t)=>{let s=0,c=0;for(let d=1;d<=7;d++){const r=res[t-24*d];if(r!==undefined){s+=r*r;c++}}return c?Math.sqrt(s/c):10};
+const newFE=A=>({A:A.slice(),fc:[],qa:[],qg:[],res:[],absS:[],cov:[],covG:[],alpha:0.2,target:0.2,gam:0.01});
+function fePrep(F,t){F.fc[t]=seas(F.A,t)*lvl(F.A,t);const g=1.28*sigG(F.res,t);let qa;if(F.absS.length<20)qa=g;else{const s=F.absS.slice(-168).sort((a,b)=>a-b),m=s.length,ix=Math.ceil((m+1)*(1-F.alpha))-1;qa=ix>=m?s[m-1]:s[Math.max(0,ix)]}F.qa[t]=qa;F.qg[t]=g;return F.fc[t]}
+function feObs(F,t,a){const p=F.fc[t],e=Math.abs(a-p),ca=e<=F.qa[t]?1:0,cg=e<=F.qg[t]?1:0;F.cov[t]=ca;F.covG[t]=cg;F.alpha=clamp(F.alpha+F.gam*(F.target-(1-ca)),0.01,0.99);F.absS.push(e);F.res[t]=a-p;F.A[t]=a}
+function warmFE(F){for(let t=192;t<H0;t++){fePrep(F,t);feObs(F,t,F.A[t])}}
+
+// ---- Mô phỏng nhà máy (plant) và sự cố
+const EVS=[{cause:'fork',k0:16,k1:36,f:0.6},{cause:'dock',k0:8,k1:24,f:0.5},{cause:'surge',k0:24,k1:40,f:1.3}];
+const evF=(e,z,k)=>(k<e.k0||k>=e.k1)?1:(e.cause==='fork'&&(z===1||z===3))?e.f:(e.cause==='dock'&&(z===0||z===4))?e.f:1;
+const evS=(e,k)=>(e.cause==='surge'&&k>=e.k0&&k<e.k1)?e.f:1;
+class Plant{
+ constructor(ev,N){this.ev=ev;this.N=N;this.k=0;this.b=[25,40,10,30,5];this.eb=[.95,.95,.95,.95,.95]}
+ step(R){const k=this.k,t=H0+Math.floor(k/4);let sg=1;for(const e of this.ev)sg*=evS(e,k);const D=demTrue(t,sg,this.N),o={D,lam:[],y:[],b:[],eff:[]};
+  for(let z=0;z<5;z++){this.eb[z]=clamp(this.eb[z]+0.1*(0.95-this.eb[z])+0.01*this.N.eta[k*5+z],0.8,1.02);let f=1;for(const e of this.ev)f*=evF(e,z,k);const eff=this.eb[z]*f,cap=eff*CAPF[z](R)/4,lam=ZS[z]*D/4,q=Math.min(cap,this.b[z]+lam);this.b[z]+=lam-q;o.lam.push(lam);o.y.push(Math.max(0,q+SY*this.N.obs[k*5+z]));o.b.push(this.b[z]);o.eff.push(eff)}
+  this.k++;return o}
+}
+
+// ---- Trụ 1: bộ lọc hạt (digital twin)
+const PFP={se:0.02,jp:0.03,je:0.005};
+function mkPF(N,seed){const r=rng(seed),b=new Float64Array(N),e=new Float64Array(N),lw=new Float64Array(N),w=new Float64Array(N).fill(1/N);for(let i=0;i<N;i++){b[i]=80*r();e[i]=0.3+0.8*r()}return{N,b,e,lw,w,r}}
+function pfStep(P,lam,capN,y){const{N,b,e,lw,w,r}=P;
+ for(let i=0;i<N;i++){e[i]=clamp(e[i]+PFP.se*gauss(r),0.3,1.1);if(r()<PFP.jp)e[i]=0.3+0.8*r();const q=Math.min(e[i]*capN,b[i]+lam);b[i]+=lam-q;const zz=(y-q)/SY;lw[i]+=-0.5*zz*zz}
+ let mx=-Infinity;for(let i=0;i<N;i++)mx=Math.max(mx,lw[i]);let s=0;for(let i=0;i<N;i++){w[i]=Math.exp(lw[i]-mx);s+=w[i]}
+ let s2=0;for(let i=0;i<N;i++){w[i]/=s;s2+=w[i]*w[i]}
+ if(1/s2<N/2){const u0=r()/N,nb=new Float64Array(N),ne=new Float64Array(N);let c=w[0],j=0;for(let i=0;i<N;i++){const u=u0+i/N;while(u>c&&j<N-1){j++;c+=w[j]}nb[i]=b[j];ne[i]=e[j]}
+  for(let i=0;i<N;i++){b[i]=Math.max(0,nb[i]+0.3*gauss(r));e[i]=clamp(ne[i]+PFP.je*gauss(r),0.3,1.1);w[i]=1/N;lw[i]=0}}
+ else{for(let i=0;i<N;i++)lw[i]=Math.log(Math.max(w[i],1e-300))}
+}
+function pfEst(P){const{N,b,e,w}=P;let mb=0,me=0,s2=0;for(let i=0;i<N;i++){mb+=w[i]*b[i];me+=w[i]*e[i];s2+=w[i]*w[i]}
+ const idx=Array.from({length:N},(_,i)=>i).sort((x,y)=>b[x]-b[y]);let c=0,lo=mb,hi=mb,gl=false;
+ for(const i of idx){c+=w[i];if(!gl&&c>=0.05){lo=b[i];gl=true}if(c>=0.95){hi=b[i];break}}
+ return{b:mb,e:me,lo,hi,ess:1/s2}}
+
+// ---- Trụ 3: kịch bản + CVaR + chọn cấu hình theo thứ tự chi phí
+function scen(fcs,hq,seed){const r=rng(seed),A=[];for(let s=0;s<S_SC;s++){const u=(s+r())/S_SC,row=[];for(let m=0;m<4;m++){const h=hq*(1+0.1*m),lo=Math.max(0,fcs[m]-h),hi=fcs[m]+h,uu=clamp(u+0.15*gauss(r),0,1);row.push(lo+(hi-lo)*uu)}A.push(row)}return A}
+function cvarZ(R,z,b0,e0,SC){const cap=e0*CAPF[z](R)/4,P=new Float64Array(S_SC);
+ for(let s=0;s<S_SC;s++){let b=b0,pk=0;for(let m=0;m<4;m++){const lam=ZS[z]*SC[s][m]/4;for(let j=0;j<4;j++){const q=Math.min(cap,b+lam);b+=lam-q;if(b>pk)pk=b}}P[s]=pk}
+ P.sort();const top=Math.ceil(EPS*S_SC);let t=0;for(let i=S_SC-top;i<S_SC;i++)t+=P[i];return t/top}
+function cvarCap(cap,z,b0,SC){const P=new Float64Array(S_SC);for(let s=0;s<S_SC;s++){let b=b0,pk=0;for(let m=0;m<4;m++){const lam=ZS[z]*SC[s][m]/4;for(let j=0;j<4;j++){const q=Math.min(cap,b+lam);b+=lam-q;if(b>pk)pk=b}}P[s]=pk}P.sort();const top=Math.ceil(EPS*S_SC);let t=0;for(let i=S_SC-top;i<S_SC;i++)t+=P[i];return t/top}
+// backlog đơn điệu theo năng lực => CVaR đơn điệu: tìm năng lực tối thiểu của zone bằng nhị phân
+function needCap(z,b0,SC){let lo=0,hi=400;for(let it=0;it<50;it++){const mid=(lo+hi)/2;if(cvarCap(mid,z,b0,SC)<=B_MAX)hi=mid;else lo=mid}return hi}
+function mpc(bh,eh,Rc,SC){
+ const obj=CONF.map(c=>{let d=0;for(const k of KEYS)d+=Math.abs(c[k]-Rc[k]);return c.cost+KAPPA*d});
+ const need=[0,1,2,3,4].map(z=>needCap(z,bh[z],SC));
+ const ord=Array.from({length:CONF.length},(_,i)=>i).sort((a,b)=>obj[a]-obj[b]);let n=0;
+ for(const i of ord){n++;const R=CONF[i];let ok=true;
+  for(let z=0;z<5;z++){if(CAPF[z](R)*eh[z]/4<need[z]){ok=false;break}}
+  if(ok)return{R:{dock:R.dock,fork:R.fork,amr:R.amr,gtp:R.gtp},cost:R.cost,checked:n,feas:true}}
+ return{R:{...RMAX},cost:costOf(RMAX),checked:n,feas:false}}
+function etaOver(b0,e0,R,fcs,z){let b=b0;for(let m=0;m<4;m++)for(let j=0;j<4;j++){const lam=ZS[z]*fcs[m]/4,q=Math.min(e0*CAPF[z](R)/4,b+lam);b+=lam-q;if(b>B_MAX)return m+1}return 0}
+
+// ---- Vòng điều khiển 15 phút
+function mkCtl(ev,N){const F=newFE(histA(N));warmFE(F);
+ return{ev,F,pl:new Plant(ev,N),bs:new Plant(ev,N),pf:[0,1,2,3,4].map(z=>mkPF(400,500+z)),ol:[0,0,0,0,0],Rc:{...R0},k:0,acc:0,na:0,fcs:[0,0,0,0],qa:0,rN:1,log:[]}}
+function tick(C){
+ if(C.k>=T_DAY)return false;
+ const k=C.k,t=H0+Math.floor(k/4),A=C.F.A;
+ if(k%4===0){const p0=fePrep(C.F,t);C.qa=C.F.qa[t];C.rN=lvl(A,t);C.fcs=[p0,1,2,3].map((_,m)=>m===0?p0:seas(A,t+m)*C.rN)}
+ const pre=C.pf.map(P=>pfEst(P));
+ const sc=scen(C.fcs,C.qa,7000+k);
+ const dec=mpc(pre.map(x=>x.b),pre.map(x=>x.e),C.Rc,sc);
+ dec.cvZ=[0,1,2,3,4].map(z=>cvarZ(dec.R,z,pre[z].b,pre[z].e,sc));
+ dec.ov=[0,1,2,3,4].map(z=>etaOver(pre[z].b,pre[z].e,C.Rc,C.fcs,z));
+ C.Rc=dec.R;
+ const o=C.pl.step(C.Rc),ob=C.bs.step(R0);
+ for(let z=0;z<5;z++){pfStep(C.pf[z],o.lam[z],CAPF[z](C.Rc)/4,o.y[z]);const q=Math.min(0.95*CAPF[z](C.Rc)/4,C.ol[z]+o.lam[z]);C.ol[z]+=o.lam[z]-q}
+ const post=C.pf.map(P=>pfEst(P));
+ C.acc+=o.D;C.na++;
+ if(C.na===4){feObs(C.F,t,C.acc/4);C.acc=0;C.na=0}
+ C.log.push({k,t,R:C.Rc,dec,cost:costOf(C.Rc)/4,truth:o.b,eff:o.eff,est:post.map(x=>x.b),lo:post.map(x=>x.lo),hi:post.map(x=>x.hi),ee:post.map(x=>x.e),ol:C.ol.slice(),bs:ob.b.slice(),totC:o.b.reduce((a,x)=>a+x,0),totB:ob.b.reduce((a,x)=>a+x,0)});
+ C.k++;return true}
+function summarize(C){const L=C.log,F=C.F,n=L.length;
+ let ovC=0,ovB=0,pC=0,pB=0,mP=0,mO=0,cnt=0;
+ for(const x of L){for(let z=0;z<5;z++){if(x.truth[z]>B_MAX)ovC++;if(x.bs[z]>B_MAX)ovB++;mP+=Math.abs(x.est[z]-x.truth[z]);mO+=Math.abs(x.ol[z]-x.truth[z]);cnt++}pC+=x.totC/4;pB+=x.totB/4}
+ const ch=arr=>{const out=[];for(let t=192;t<arr.length;t++)if(arr[t]!==undefined)out.push(arr[t]);return out};
+ const mC=[],mN=[],sf=[];
+ for(let t=192;t<F.cov.length;t++){if(F.cov[t]===undefined)continue;mC.push(Math.abs(F.A[t]-F.fc[t])/F.A[t]);mN.push(Math.abs(F.A[t]-F.A[t-24])/F.A[t]);if(t>=240)sf.push(t)}
+ return{n,peakB:Math.max(...L.map(x=>x.totB)),peakC:Math.max(...L.map(x=>x.totC)),ovB,ovC,pB,pC,costB:costOf(R0)/4*n,costC:L.reduce((a,x)=>a+x.cost,0),maeP:mP/cnt,maeO:mO/cnt,covA:mean(ch(F.cov)),covG:mean(ch(F.covG)),covAs:mean(sf.map(t=>F.cov[t])),covGs:mean(sf.map(t=>F.covG[t])),mapeC:mean(mC),mapeN:mean(mN),nInf:L.filter(x=>!x.dec.feas).length,chk:mean(L.map(x=>x.dec.checked)),alpha:F.alpha}}
+
+// Kiểm tra riêng Trụ 1: cấu hình cố định R0, cùng sự cố, không điều khiển
+function twinTest(N){const C=mkCtl(EVS.map(e=>({...e})),N);let mP=0,mO=0,c=0;
+ for(let k=0;k<T_DAY;k++){const o=C.pl.step(R0);for(let z=0;z<5;z++){pfStep(C.pf[z],o.lam[z],CAPF[z](R0)/4,o.y[z]);const q=Math.min(0.95*CAPF[z](R0)/4,C.ol[z]+o.lam[z]);C.ol[z]+=o.lam[z]-q;mP+=Math.abs(pfEst(C.pf[z]).b-o.b[z]);mO+=Math.abs(C.ol[z]-o.b[z]);c++}}
+ return{pf:mP/c,ol:mO/c}}
+
+// ---- Trụ 4: Thompson sampling theo bối cảnh
+const ACT=['Thêm AMR','Thêm xe nâng','Dời 15% lượng nhập','Điều xe nâng từ zone khác'];
+const GRP=['Nhập hàng / Nhập kho','Soạn hàng GTP','Cấp line / Xuất hàng'],SFT=['sáng','chiều','đêm'];
+const ctxOf=(z,hod)=>(z<=1?0:z===2?1:2)*3+(hod>=6&&hod<14?0:(hod>=14&&hod<22?1:2));
+const ruleP=(c,a)=>{const g=Math.floor(c/3);return g===0&&a===1?0.7:(g===2&&a===2?0.65:0.5)};
+function mkBandit(seed){const r=rng(seed),truth=[],al=[],be=[];for(let c=0;c<9;c++){truth.push([]);al.push([]);be.push([]);for(let a=0;a<4;a++){truth[c].push(0.25+0.65*r());const m=ruleP(c,a);al[c].push(m*4);be[c].push((1-m)*4)}}return{truth,al,be,r:rng(seed+1),hist:[]}}
+const gam=(a,r)=>{if(a<1)return gam(a+1,r)*Math.pow(r(),1/a);const d=a-1/3,c=1/Math.sqrt(9*d);for(;;){let x,v;do{x=gauss(r);v=1+c*x}while(v<=0);v=v*v*v;const u=r();if(u<1-0.0331*x*x*x*x)return d*v;if(Math.log(u)<0.5*x*x+d*(1-v+Math.log(v)))return d*v}};
+function bChoose(B,c){let best=0,bv=-1;for(let a=0;a<4;a++){const x=gam(B.al[c][a],B.r),y=gam(B.be[c][a],B.r),v=x/(x+y);if(v>bv){bv=v;best=a}}return best}
+const bRec=(B,c)=>{let best=0,bv=-1;for(let a=0;a<4;a++){const m=B.al[c][a]/(B.al[c][a]+B.be[c][a]);if(m>bv){bv=m;best=a}}return best};
+function bRun(B,n){for(let i=0;i<n;i++){const c=Math.floor(B.r()*9),a=bChoose(B,c),s=B.r()<B.truth[c][a]?1:0;if(s)B.al[c][a]+=1;else B.be[c][a]+=1;B.hist.push({c,a,s})}return B}
+function bStats(B){const best=B.truth.map(row=>row.indexOf(Math.max(...row)));const H=B.hist,h=Math.min(50,Math.floor(H.length/2)),f=H.slice(0,h),l=H.slice(-h);
+ const sr=a=>mean(a.map(x=>x.s)),bp=a=>mean(a.map(x=>x.a===best[x.c]?1:0));
+ return{n:H.length,sr1:sr(f),sr2:sr(l),bp1:bp(f),bp2:bp(l),best,rec:B.truth.map((_,c)=>bRec(B,c)),cnt:B.truth.map((_,c)=>H.filter(x=>x.c===c).length)}}
+
+// ---- Trụ 5: Shapley trên 3 nguyên nhân
+function peakOf(causes,N){const ev=EVS.filter(e=>causes.includes(e.cause)),p=new Plant(ev,N);let pk=0;for(let k=0;k<T_DAY;k++){const o=p.step(R0),s=o.b.reduce((a,x)=>a+x,0);if(s>pk)pk=s}return pk}
+function shapley(N){const C=['surge','fork','dock'],v=[];for(let m=0;m<8;m++)v[m]=peakOf(C.filter((_,i)=>(m>>i)&1),N);
+ const W=[1/3,1/6,1/3],pcnt=m=>[0,1,2].reduce((a,i)=>a+((m>>i)&1),0);
+ const phi=C.map((_,i)=>{let s=0;for(let m=0;m<8;m++){if((m>>i)&1)continue;s+=W[pcnt(m)]*(v[m|(1<<i)]-v[m])}return s});
+ return{C,phi,v,base:v[0],full:v[7]}}
+
+// ===UI===
+const $=id=>document.getElementById(id);
+const pc=v=>Number.isFinite(v)?Math.round(v*100)+'%':'–';
+const fx=(v,d=0)=>Number.isFinite(v)?Number(v).toFixed(d):'–';
+const hhmm=k=>{const m=(360+k*15)%1440;return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0')};
+const box=(l,v,s,c)=>`<div class="c"><div class="m">${l}</div><div class="big ${c||''}">${v}</div><div class="m">${s||''}</div></div>`;
+function chart(S,o){const W=o.W||640,H=o.H||220,p=44,n=Math.max(2,...S.map(s=>s.y.length)),y0=o.y0??0,y1=Math.max(o.y1??1,y0+1e-9);
+ const X=i=>p+i*(W-p-12)/(n-1),Y=v=>H-24-(clamp(v,y0,y1)-y0)/(y1-y0)*(H-36);
+ let s=`<svg viewBox="0 0 ${W} ${H}" width="100%" style="min-width:460px;display:block">`;
+ for(let k=0;k<=4;k++){const v=y0+(y1-y0)*k/4;s+=`<line x1="${p}" x2="${W-12}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" stroke="var(--bd)"/><text x="4" y="${(Y(v)+4).toFixed(1)}" font-size="10" fill="var(--mu)">${o.fmt?o.fmt(v):Math.round(v)}</text>`}
+ if(o.xl)for(let i=0;i<n;i+=(o.xs||16))s+=`<text x="${(X(i)-10).toFixed(1)}" y="${H-6}" font-size="10" fill="var(--mu)">${o.xl(i)}</text>`;
+ if(o.band){const b=o.band,pts=[];b.lo.forEach((v,i)=>pts.push(X(i).toFixed(1)+','+Y(v).toFixed(1)));for(let i=b.hi.length-1;i>=0;i--)pts.push(X(i).toFixed(1)+','+Y(b.hi[i]).toFixed(1));s+=`<polygon points="${pts.join(' ')}" fill="${b.c}" opacity=".16"/>`}
+ for(const r of o.ref||[])s+=`<line x1="${p}" x2="${W-12}" y1="${Y(r.v).toFixed(1)}" y2="${Y(r.v).toFixed(1)}" stroke="${r.c}" stroke-dasharray="5 4"/>`;
+ for(const q of S)s+=`<polyline fill="none" stroke="${q.c}" stroke-width="${q.w||2}" ${q.d?'stroke-dasharray="5 4"':''} points="${q.y.map((v,i)=>X(i).toFixed(1)+','+Y(v).toFixed(1)).join(' ')}"/>`;
+ return s+'</svg>'}
+
+const TABS=['Vận hành','Dự báo (Trụ 2)','Digital twin (Trụ 1)','Điều khiển cuộn (Trụ 3)','Học đối sách (Trụ 4)','Giải thích (Trụ 5)','Ý tưởng'];
+let ACTIVE=0,CTL=null,LIVE_EV=null,timer=null,BANDIT=mkBandit(2026);
+$('tabs').innerHTML=TABS.map((t,i)=>`<button id="b${i}" class="${i?'':'on'}" onclick="showTab(${i})">${t}</button>`).join('');
+function showTab(i){ACTIVE=i;TABS.forEach((_,j)=>{$('t'+j).classList.toggle('on',i===j);$('b'+j).classList.toggle('on',i===j)});
+ if(i===1)renderForecast();if(i===2)renderTwin();if(i===4)renderBandit()}
+
+function newRun(){if(timer){clearInterval(timer);timer=null}LIVE_EV=EVS.map(e=>({...e}));CTL=mkCtl(LIVE_EV,NZ);$('playbtn').textContent='▶ Chạy';renderLive();renderForecast();renderTwin()}
+function togglePlay(){if(timer){clearInterval(timer);timer=null;$('playbtn').textContent='▶ Tiếp tục';return}
+ $('playbtn').textContent='⏸ Tạm dừng';
+ timer=setInterval(()=>{const more=tick(CTL);renderLive();if(ACTIVE===1)renderForecast();if(ACTIVE===2)renderTwin();
+  if(!more){clearInterval(timer);timer=null;$('playbtn').textContent='✔ Hết ngày · bấm ↺ Ngày mới'}},400)}
+function inject(c){if(!CTL||CTL.k>=T_DAY)return;const f={surge:1.3,fork:0.6,dock:0.5}[c];LIVE_EV.push({cause:c,k0:CTL.k,k1:CTL.k+8,f});renderLive()}
+
+function renderLive(){if(!CTL)return;const C=CTL,L=C.log,x=L[L.length-1];
+ $('clock').textContent=hhmm(C.k)+(C.k>=T_DAY?' · hết ngày':'');
+ $('prog').style.width=(C.k/T_DAY*100)+'%';
+ if(!x){$('zones').innerHTML='';$('alerts').innerHTML='<span class="m">Bấm ▶ Chạy để bắt đầu ngày vận hành (96 bước × 15 phút).</span>';$('mpc').innerHTML='';$('live').innerHTML='';$('legend').innerHTML='';return}
+ $('zones').innerHTML=ZN.map((n,z)=>{const e=x.ee[z],st=e<0.8?'rd':(x.est[z]>B_MAX?'wa':'ok');
+  return `<div class="c"><div class="m">${z+1}. ${n}</div><div class="m">Backlog ước lượng (twin)</div><div class="big ${st}">${fx(x.est[z])} <span class="m">pallet</span></div><div class="m">khoảng 90%: ${fx(x.lo[z])}–${fx(x.hi[z])} · η̂ = ${fx(e,2)}</div><div class="m">Thực tế (chỉ để kiểm chứng): ${fx(x.truth[z])}</div></div>`}).join('');
+ const al=[];
+ for(let z=0;z<5;z++){const e=x.ee[z];
+  if(e<0.8)al.push(['rd',`<b>${ZN[z]}</b>: twin thấy hiệu suất giảm còn η̂ = ${fx(e,2)}${[1,3].includes(z)?' → nghi xe nâng/AMR':((z===0||z===4)?' → nghi cửa dock':'')}`]);
+  if(x.dec.ov[z]>0){const c=ctxOf(z,hodOf(x.t));al.push(['wa',`<b>${ZN[z]}</b>: giữ cấu hình trước thì dự kiến vượt ${B_MAX} pallet sau ~${x.dec.ov[z]} giờ. Gợi ý đối sách (shadow, Trụ 4): <i>${ACT[bRec(BANDIT,c)]}</i>`])}}
+ $('alerts').innerHTML=al.length?al.map(a=>`<div class="al" style="border-color:var(--${a[0]})">${a[1]}</div>`).join(''):'<span class="ok">✔ Không có cảnh báo: cấu hình hiện tại đủ năng lực theo twin.</span>';
+ const d=x.dec,R=x.R;
+ $('mpc').innerHTML=`Cấu hình đang áp dụng: <b>${KEYS.map(k=>R[k]+' '+UN[k]).join(', ')}</b> · chi phí ${fx(costOf(R),1)}/giờ<br>Duyệt ${d.checked} cấu hình (sắp theo chi phí + phạt khi đổi) → ${d.feas?'nghiệm khả thi đầu tiên':'<span class="rd">không có nghiệm khả thi, dùng cấu hình tối đa</span>'}. CVaR₉₀ backlog đỉnh từng zone: ${d.cvZ.map(v=>fx(v,1)).join(' / ')} (ngưỡng ${B_MAX})`;
+ const mx=Math.max(40,...L.map(v=>v.totB),...L.map(v=>v.totC))*1.1;
+ $('live').innerHTML=chart([{y:L.map(v=>v.totC),c:'#1a9e5c',w:2.5},{y:L.map(v=>v.totB),c:'#d62839',w:2,d:1}],{y1:mx,xl:i=>hhmm(i),xs:16,W:700});
+ $('legend').innerHTML='<span style="color:#1a9e5c">━ Co-pilot</span> &nbsp; <span style="color:#d62839">┅ không co-pilot (cấu hình cố định)</span> &nbsp; · đơn vị: pallet tồn đọng, tổng 5 zone';
+}
+
+function renderForecast(){if(!CTL)return;const F=CTL.F,ts=[];for(let t=192;t<F.cov.length;t++)if(F.cov[t]!==undefined)ts.push(t);if(!ts.length)return;
+ const act=ts.map(t=>F.A[t]),fc=ts.map(t=>F.fc[t]),lo=ts.map(t=>Math.max(0,F.fc[t]-F.qa[t])),hi=ts.map(t=>F.fc[t]+F.qa[t]),nv=ts.map(t=>F.A[t-24]);
+ const xd=i=>'Ng.'+(Math.floor((ts[i]+6)/24)+1);
+ $('fc1').innerHTML=chart([{y:act,c:'#14213d',w:2.5},{y:fc,c:'#2457c5',w:2},{y:nv,c:'#e07b00',w:1.2,d:1}],{band:{lo,hi,c:'#2457c5'},y0:0,y1:Math.max(...hi,...act)*1.05,xl:xd,xs:24,W:700});
+ let ca=0,cg=0;const ra=[],rg=[];ts.forEach((t,i)=>{ca+=F.cov[t];cg+=F.covG[t];ra.push(ca/(i+1));rg.push(cg/(i+1))});
+ $('fc2').innerHTML=chart([{y:ra,c:'#2457c5',w:2.5},{y:rg,c:'#d62839',w:2,d:1}],{y0:0.4,y1:1,fmt:v=>pc(v),ref:[{v:0.8,c:'#1a9e5c'}],xl:xd,xs:24,W:700});
+ const cA=mean(ts.map(t=>F.cov[t])),cG=mean(ts.map(t=>F.covG[t])),sf=ts.filter(t=>t>=240);
+ $('fcStats').innerHTML=box('Độ phủ ACI (toàn bộ)',pc(cA),'mục tiêu 80%',Math.abs(cA-0.8)<0.05?'ok':'wa')+box('Độ phủ khoảng cố định ±1.28σ',pc(cG),'giả định phân phối chuẩn')+box('Sau đơn tăng (ngày 11): ACI',pc(mean(sf.map(t=>F.cov[t]))),'kể từ 06:00 ngày 11')+box('Sau đơn tăng: cố định',pc(mean(sf.map(t=>F.covG[t]))),'')+box('α hiện tại (ACI)',fx(F.alpha,3),'tự điều chỉnh: trượt → nới khoảng');
+}
+
+function renderTwin(){if(!CTL||!CTL.log.length)return;const z=+$('zsel').value,L=CTL.log;
+ $('tw1').innerHTML=chart([{y:L.map(x=>x.truth[z]),c:'#14213d',w:2.5},{y:L.map(x=>x.est[z]),c:'#2457c5',w:2}],{band:{lo:L.map(x=>x.lo[z]),hi:L.map(x=>x.hi[z]),c:'#2457c5'},y0:0,y1:Math.max(40,...L.map(x=>x.truth[z]),...L.map(x=>x.hi[z]))*1.1,xl:i=>hhmm(i),xs:16,W:700});
+ $('tw2').innerHTML=chart([{y:L.map(x=>x.eff[z]),c:'#14213d',w:2.5},{y:L.map(x=>x.ee[z]),c:'#2457c5',w:2}],{y0:0.6,y1:1.1,fmt:v=>fx(v,2),xl:i=>hhmm(i),xs:16,W:700});
+ const mP=mean(L.map(x=>Math.abs(x.est[z]-x.truth[z]))),mO=mean(L.map(x=>Math.abs(x.ol[z]-x.truth[z])));
+ $('twStats').innerHTML=box('Sai số backlog: twin bộ lọc hạt',fx(mP,1)+' pallet','trung bình theo bước, zone đang chọn','ok')+box('Sai số: mô phỏng không hiệu chỉnh',fx(mO,1)+' pallet','khởi tạo sai, không thấy sự cố','wa');
+}
+
+function optHTML(S){return `<table><tr><th>Chỉ số (kịch bản chuẩn, 1 ngày)</th><th class="r">Không co-pilot</th><th class="r">Co-pilot</th><th>Ghi chú</th></tr>
+<tr><td>Backlog đỉnh (tổng pallet)</td><td class="r">${fx(S.peakB)}</td><td class="r"><b>${fx(S.peakC)}</b></td><td class="m">thấp hơn là tốt</td></tr>
+<tr><td>Số lần zone vượt ${B_MAX} pallet</td><td class="r">${S.ovB}</td><td class="r"><b>${S.ovC}</b></td><td class="m">trên 5 zone × 96 bước</td></tr>
+<tr><td>Pallet-giờ tồn đọng</td><td class="r">${fx(S.pB)}</td><td class="r"><b>${fx(S.pC)}</b></td><td class="m">tích phân backlog theo thời gian</td></tr>
+<tr><td>Chi phí nguồn lực trong ngày (điểm)</td><td class="r">${fx(S.costB)}</td><td class="r"><b>${fx(S.costC)}</b></td><td class="m">co-pilot tăng khi cần, giảm khi nhàn</td></tr></table>
+<table><tr><th>Ước lượng và dự báo (cùng dữ liệu)</th><th class="r">Cách cũ / không hiệu chỉnh</th><th class="r">Hệ thống</th><th>Ghi chú</th></tr>
+<tr><td>Sai số backlog khi co-pilot đang điều khiển (pallet)</td><td class="r">${fx(S.maeO,1)}</td><td class="r"><b>${fx(S.maeP,1)}</b></td><td class="m">hàng đợi ngắn nên sai số đều nhỏ</td></tr>
+<tr><td>Sai số backlog khi KHÔNG điều khiển (cấu hình R0, cùng sự cố)</td><td class="r">${fx(S.tw.ol,1)}</td><td class="r"><b>${fx(S.tw.pf,1)}</b></td><td class="m">phép đo tách riêng Trụ 1</td></tr>
+<tr><td>Sai số dự báo nhu cầu (MAPE)</td><td class="r">${pc(S.mapeN)} (cùng giờ hôm qua)</td><td class="r"><b>${pc(S.mapeC)}</b></td><td class="m">trên các giờ kiểm định</td></tr>
+<tr><td>Độ phủ khoảng dự báo (mục tiêu 80%)</td><td class="r">${pc(S.covG)} (±1.28σ cố định)</td><td class="r"><b>${pc(S.covA)}</b> (ACI)</td><td class="m">sau đơn tăng: ${pc(S.covGs)} vs ${pc(S.covAs)}</td></tr></table>
+<div class="m">Điều khiển cuộn: trung bình ${fx(S.chk,0)} cấu hình được duyệt mỗi bước; ${S.nInf} bước không có nghiệm khả thi (dùng cấu hình tối đa). Toàn bộ số liệu là mô phỏng, cần đo lại bằng dữ liệu DMVN.</div>`}
+function runOpt(){$('optOut').innerHTML='<span class="m">Đang mô phỏng 96 bước cho hai phương án…</span>';
+ setTimeout(()=>{const C=mkCtl(EVS.map(e=>({...e})),NZ);while(tick(C));const S=summarize(C);S.tw=twinTest(NZ);$('optOut').innerHTML=optHTML(S)},30)}
+
+function runBandit(){BANDIT=bRun(mkBandit(2026),300);renderBandit()}
+function renderBandit(){const el=$('banOut');
+ if(!BANDIT.hist.length){el.innerHTML='<span class="m">Chưa có dữ liệu. Mỗi sự cố có một bối cảnh (zone × ca), hệ thống chọn đối sách bằng Thompson sampling, kết quả lấy từ một "sự thật" mà hệ thống không biết.</span>';return}
+ const s=bStats(BANDIT);
+ el.innerHTML=`<div class="g">${box('Thành công · 50 sự cố đầu',pc(s.sr1))}${box('Thành công · 50 sự cố cuối',pc(s.sr2),'',s.sr2>s.sr1?'ok':'')}${box('Chọn đúng đối sách tốt nhất',pc(s.bp1)+' → '+pc(s.bp2),'đầu → cuối')}</div>
+ <table><tr><th>Bối cảnh</th><th>Đối sách tốt nhất (sự thật)</th><th>Hệ thống học được</th><th class="r">Số lần</th></tr>
+ ${[0,1,2,3,4,5,6,7,8].map(c=>`<tr><td>${GRP[Math.floor(c/3)]} · ca ${SFT[c%3]}</td><td>${ACT[s.best[c]]}</td><td>${ACT[s.rec[c]]} ${s.best[c]===s.rec[c]?'✔':'✗'}</td><td class="r">${s.cnt[c]}</td></tr>`).join('')}</table>
+ <div class="m">Phản hồi người vận hành là giả lập từ một bảng sự thật ngẫu nhiên. Kết quả chứng minh cơ chế học, chưa chứng minh hiệu quả thật của từng đối sách.</div>`}
+
+function runShap(){const r=shapley(NZ),tot=r.full-r.base,NM={surge:'Đơn tăng 30%',fork:'Xe nâng hỏng (zone xe nâng còn 60%)',dock:'Mất nửa cửa dock (zone dock còn 50%)'};
+ const nm=m=>m?r.C.filter((_,i)=>(m>>i)&1).map(c=>CN[c]).join(' + '):'không sự cố';
+ const bars=r.C.map((c,i)=>{const p=r.phi[i];return `<div style="margin:8px 0"><b>${NM[c]}</b>: ${fx(p,1)} pallet (${pc(p/tot)} phần tăng)<div class="bar"><i style="width:${clamp(p/tot,0,1)*100}%"></i></div></div>`}).join('');
+ const rows=[0,1,2,3,4,5,6,7].map(m=>`<tr><td>${nm(m)}</td><td class="r">${fx(r.v[m],0)}</td></tr>`).join('');
+ $('shOut').innerHTML=`<div class="g">${box('Backlog đỉnh không sự cố',fx(r.base,0)+' pallet','cấu hình cố định R0')}${box('Backlog đỉnh khi đủ 3 sự cố',fx(r.full,0)+' pallet','cùng cấu hình R0')}</div>
+ <h3>Phân bổ phần tăng backlog đỉnh (Shapley)</h3>${bars}
+ <div class="m">Giá trị Shapley là trung bình đóng góp của từng nguyên nhân trên mọi thứ tự xuất hiện, nên tổng các phần bằng đúng phần tăng và không có phần dư.</div>
+ <h3 style="margin-top:12px">Backlog đỉnh theo từng tổ hợp sự cố (8 lần mô phỏng)</h3><table><tr><th>Tổ hợp</th><th class="r">Backlog đỉnh (pallet)</th></tr>${rows}</table>`}
+const CN={surge:'đơn tăng',fork:'xe nâng hỏng',dock:'mất cửa dock'};
+
+// ---- khởi tạo
+newRun();renderBandit();showTab(0);
+</script></body></html>
